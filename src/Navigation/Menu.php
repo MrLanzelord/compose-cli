@@ -47,10 +47,19 @@ final class Menu implements MenuInterface
     {
         $this->terminal->enableRawMode();
         $selected = 0;
+        $first = true;
 
         try {
             while (true) {
-                system('clear');
+                // Redibujado en sitio: limpiar la pantalla solo la primera vez
+                // y, en cada tecla, restaurar la posición guardada y borrar solo
+                // desde ahí hacia abajo. Evita el parpadeo del clear por tecla.
+                if ($first) {
+                    $this->output->write("\033[2J\033[H\033[s");
+                    $first = false;
+                } else {
+                    $this->output->write("\033[u\033[J");
+                }
 
                 $this->output->writeln(Palette::CYAN . Palette::BOLD . ' ' . $title . Palette::RESET);
 

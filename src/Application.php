@@ -177,7 +177,7 @@ final class Application
 
     private function help(ConsoleOutputInterface $output): int
     {
-        $output->writeln('<h1>compose-cli</h1> — Gestión de stacks Docker Compose del servidor Horizon');
+        $output->writeln('<h1>compose-cli</h1> — Gestión de stacks Docker Compose');
         $output->writeln('');
         $output->writeln('<h1>Uso:</h1>');
         $output->writeln('  cli.php                                  Menú interactivo');
