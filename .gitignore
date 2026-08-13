@@ -1,0 +1,8 @@
+# Configuración local (no subir a git)
+compose-cli.env
+
+# Sistema / editor
+.DS_Store
+*.swp
+
+# Nota: vendor/ SÍ se sube a git para permitir la instalación sin composer.
