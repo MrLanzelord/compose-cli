@@ -1,0 +1,30 @@
+{
+    "name": "compose-cli/compose-cli",
+    "description": "CLI interactiva para gestionar stacks Docker Compose.",
+    "type": "project",
+    "license": "AGPL-3.0-or-later",
+    "bin": [
+        "cli.php"
+    ],
+    "require": {
+        "php": ">=8.4",
+        "ext-json": "*",
+        "symfony/console": "^7.0"
+    },
+    "require-dev": {},
+    "autoload": {
+        "psr-4": {
+            "ComposeCli\\": "src/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": true
+    },
+    "scripts": {
+        "check": [
+            "@php -l cli.php",
+            "@php -l src/Application.php"
+        ]
+    }
+}
