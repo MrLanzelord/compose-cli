@@ -50,34 +50,39 @@ final class Menu implements MenuInterface
         $first = true;
 
         try {
+            // Oculta el cursor mientras el menú está activo para evitar que se
+            // vea el barrido del cursor durante el repintado.
+            $this->output->write("\033[?25l");
+
             while (true) {
-                // Redibujado en sitio: limpiar la pantalla solo la primera vez
-                // y, en cada tecla, restaurar la posición guardada y borrar solo
+                // Redibujado en sitio y atómico: se construye el frame completo
+                // y se emite en una sola escritura. Limpia la pantalla solo la
+                // primera vez; después restaura la posición guardada y borra
                 // desde ahí hacia abajo. Evita el parpadeo del clear por tecla.
                 if ($first) {
-                    $this->output->write("\033[2J\033[H\033[s");
+                    $frame = "\033[2J\033[H\033[s";
                     $first = false;
                 } else {
-                    $this->output->write("\033[u\033[J");
+                    $frame = "\033[u\033[J";
                 }
 
-                $this->output->writeln(Palette::CYAN . Palette::BOLD . ' ' . $title . Palette::RESET);
+                $frame .= Palette::CYAN . Palette::BOLD . ' ' . $title . Palette::RESET . "\n";
 
                 $navHint = $allowBack
                     ? '(↑/↓: Mover | Enter/→: Seleccionar | ←: Volver)'
                     : '(↑/↓: Mover | Enter: Seleccionar)';
-                $this->output->writeln(Palette::DIM . ' ' . $navHint . Palette::RESET);
-                $this->output->writeln('');
+                $frame .= Palette::DIM . ' ' . $navHint . Palette::RESET . "\n\n";
 
                 foreach ($items as $i => $item) {
                     if ($i === $selected) {
-                        $this->output->writeln(
-                            ' ' . Palette::GREEN . Palette::BOLD . '❯ ' . $item->label . Palette::RESET
-                        );
+                        $frame .= ' ' . Palette::GREEN . Palette::BOLD . '❯ ' . $item->label . Palette::RESET . "\n";
                     } else {
-                        $this->output->writeln('   ' . $item->label);
+                        $frame .= '   ' . $item->label . "\n";
                     }
                 }
+
+                $this->output->write($frame);
+                fflush(STDOUT);
 
                 $key = $this->terminal->readKey();
 
@@ -103,6 +108,7 @@ final class Menu implements MenuInterface
                 }
             }
         } finally {
+            $this->output->write("\033[?25h");
             $this->terminal->restore();
         }
     }
