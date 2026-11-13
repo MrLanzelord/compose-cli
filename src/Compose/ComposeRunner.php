@@ -13,13 +13,22 @@ use ComposeCli\Support\Palette;
  */
 final class ComposeRunner implements ComposeRunnerInterface
 {
-    public function run(Service $service, string $action, array $extraArgs = [], bool $dryRun = false): int
-    {
+    public function run(
+        Service $service,
+        string $action,
+        array $extraArgs = [],
+        bool $dryRun = false,
+        ?string $targetService = null,
+    ): int {
         $tokens = array_merge(
             ['docker', 'compose', '-f', $service->composeFile],
             explode(' ', $action),
             $extraArgs,
         );
+
+        if ($targetService !== null && $targetService !== '') {
+            $tokens[] = $targetService;
+        }
 
         $command = implode(' ', array_map('escapeshellarg', $tokens));
 

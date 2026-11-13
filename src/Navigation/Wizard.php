@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ComposeCli\Navigation;
 
 use ComposeCli\Compose\ActionCatalog;
+use ComposeCli\Compose\ServiceResolver;
 use ComposeCli\Compose\StackStatusChecker;
 use ComposeCli\Navigation\Contracts\MenuInterface;
 use ComposeCli\Stacks\Contracts\StackCatalogInterface;
@@ -12,17 +13,20 @@ use ComposeCli\Stacks\Service;
 use ComposeCli\Support\IconCatalog;
 
 /**
- * Orquesta el flujo interactivo de selección en 3 pasos:
- * Categoría → Servicio → Acción.
+ * Orquesta el flujo interactivo de selección en 4 pasos:
+ * Categoría → Stack (cliente) → Servicio (o todos) → Acción.
  */
 final class Wizard
 {
     use IconCatalog;
 
+    private const ALL_SERVICES = '__ALL__';
+
     public function __construct(
         private readonly StackCatalogInterface $catalog,
         private readonly MenuInterface $menu,
         private readonly ActionCatalog $actions,
+        private readonly ServiceResolver $serviceResolver,
         private readonly StackStatusChecker $statusChecker = new StackStatusChecker(),
     ) {
     }
@@ -31,7 +35,8 @@ final class Wizard
     {
         $step = 1;
         $category = null;
-        $service = null;
+        $stack = null;
+        $target = null;
         $action = null;
 
         while (true) {
@@ -45,7 +50,7 @@ final class Wizard
                 $category = $selected;
                 $step = 2;
             } elseif ($step === 2) {
-                $selected = $this->selectService($category);
+                $selected = $this->selectStack($category);
 
                 if ($selected === null || $selected === MenuItem::BACK) {
                     $step = 1;
@@ -61,13 +66,24 @@ final class Wizard
                     continue;
                 }
 
-                $service = $resolved;
+                $stack = $resolved;
                 $step = 3;
-            } else {
-                $selected = $this->selectAction($service);
+            } elseif ($step === 3) {
+                $selected = $this->selectComposeService($stack);
 
                 if ($selected === null || $selected === MenuItem::BACK) {
                     $step = 2;
+
+                    continue;
+                }
+
+                $target = $selected === self::ALL_SERVICES ? null : $selected;
+                $step = 4;
+            } else {
+                $selected = $this->selectAction($stack, $target);
+
+                if ($selected === null || $selected === MenuItem::BACK) {
+                    $step = 3;
 
                     continue;
                 }
@@ -78,7 +94,7 @@ final class Wizard
             }
         }
 
-        return new WizardResult($service, $action);
+        return new WizardResult($stack, $action, $target);
     }
 
     private function selectCategory(): ?string
@@ -92,10 +108,10 @@ final class Wizard
             );
         }
 
-        return $this->menu->select($items, '📂 Paso 1/3: Selecciona una Categoría:');
+        return $this->menu->select($items, '📂 Paso 1/4: Selecciona una Categoría:');
     }
 
-    private function selectService(string $category): ?string
+    private function selectStack(string $category): ?string
     {
         $items = [
             new MenuItem(
@@ -117,12 +133,39 @@ final class Wizard
 
         return $this->menu->select(
             $items,
-            "📦 Paso 2/3: Selecciona un Servicio en '$category':",
+            "📦 Paso 2/4: Selecciona un Stack en '$category':",
             true,
         );
     }
 
-    private function selectAction(Service $service): ?string
+    private function selectComposeService(Service $stack): ?string
+    {
+        $items = [
+            new MenuItem(
+                MenuItem::BACK,
+                $this->actionIcon('back') . '  .. (Volver a Stacks)',
+            ),
+            new MenuItem(
+                self::ALL_SERVICES,
+                $this->actionIcon('up') . '  Todos los servicios',
+            ),
+        ];
+
+        foreach ($this->serviceResolver->services($stack->composeFile) as $serviceName) {
+            $items[] = new MenuItem(
+                $serviceName,
+                $this->serviceIcon($serviceName) . '  ' . $serviceName,
+            );
+        }
+
+        return $this->menu->select(
+            $items,
+            "🐳 Paso 3/4: Servicio en '{$stack->displayName}':",
+            true,
+        );
+    }
+
+    private function selectAction(Service $stack, ?string $target): ?string
     {
         $items = [
             new MenuItem(
@@ -143,10 +186,11 @@ final class Wizard
             );
         }
 
+        $subject = $target ?? $stack->displayName;
+
         return $this->menu->select(
             $items,
-            "⚡ Paso 3/3: Selecciona la acción para '{$service->displayName}' "
-            . $this->statusBadge($service) . ':',
+            "⚡ Paso 4/4: Acción para '{$subject}' " . $this->statusBadge($stack) . ':',
             true,
         );
     }

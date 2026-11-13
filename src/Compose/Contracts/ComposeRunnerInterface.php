@@ -9,9 +9,16 @@ use ComposeCli\Stacks\Service;
 interface ComposeRunnerInterface
 {
     /**
-     * Ejecuta una acción de docker compose sobre un stack.
+     * Ejecuta una acción de docker compose sobre un stack, opcionalmente
+     * limitada a un único servicio del stack.
      *
      * @param string[] $extraArgs
      */
-    public function run(Service $service, string $action, array $extraArgs = [], bool $dryRun = false): int;
+    public function run(
+        Service $service,
+        string $action,
+        array $extraArgs = [],
+        bool $dryRun = false,
+        ?string $targetService = null,
+    ): int;
 }

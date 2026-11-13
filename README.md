@@ -2,9 +2,9 @@
 
 CLI para gestionar los stacks Docker Compose de tu servidor.
 
-- **Menú interactivo** con navegación por flechas (categoría → servicio → acción).
+- **Menú interactivo** con navegación por flechas (categoría → stack → servicio → acción).
 - **Estado en vivo** de cada stack directamente en el menú (arriba / con error / abajo).
-- **Modo directo** de un solo comando: `compose sites/foo up -d`.
+- **Modo directo** de un solo comando: `compose sites/matra up -d` (todo el cliente) o `compose sites/matra cms-matra-wp up -d` (un solo servicio).
 - **Configurable** mediante un archivo `.env` (directorio de stacks y sufijos de dominio).
 
 ## Requisitos
@@ -55,25 +55,28 @@ compose
 ```
 
 1. Elige una **categoría** (`ai`, `apps`, `core`, `instances`, `sites`).
-2. Elige un **servicio**. Cada línea muestra un ícono de estado:
+2. Elige un **stack** (p. ej. el cliente). Cada línea muestra un ícono de estado:
    - `●` verde = arriba · `!` rojo = con error · `○` gris = abajo.
-3. Elige la **acción** (`up`, `up -d`, `down`, `logs -f`, `restart`, …).
+3. Elige un **servicio** del stack (o *Todos los servicios*).
+4. Elige la **acción** (`up`, `up -d`, `down`, `logs -f`, `restart`, …).
 
 Atajos: `↑/↓` mover · `Enter/→` seleccionar · `←` volver.
 
 ### Modo directo (un solo comando)
 
 ```bash
-compose sites/foo up -d
-compose sites/bar up -d
-compose foo restart              # sin categoría
+compose sites/matra up -d                 # todo el cliente
+compose sites/matra cms-matra-wp up -d    # solo un servicio del cliente
+compose matra restart                     # sin categoría, todo el cliente
 compose core/adguard logs -f
-compose --dry-run sites/foo up --build   # solo imprime el comando
+compose --dry-run sites/matra up --build  # solo imprime el comando
 ```
 
-El nombre del servicio puede darse **con o sin el sufijo de dominio**
+El nombre del stack puede darse **con o sin el sufijo de dominio**
 (`sites/foo` o `sites/foo.midominio.com` son equivalentes
-si el sufijo está configurado).
+si el sufijo está configurado). El servicio se valida contra los servicios
+reales del stack (`docker compose config --services`), así que escríbelo tal
+cual aparece en el `docker-compose.yml` (p. ej. `cms-matra-wp`, `matra-db`).
 
 | Opción | Descripción |
 | ------ | ----------- |
@@ -133,15 +136,23 @@ server/docker/
 │   └── macos/
 │       └── docker-compose.yml
 └── sites/
-    ├── foo.midominio.com/
-    │   └── docker-compose.yml
-    └── bar.midominio.com/
-        └── docker-compose.yml
+    └── matra/                      ← 1 stack por cliente
+        ├── docker-compose.yml      ← todos los sitios del cliente
+        ├── .env
+        ├── db/                     ← datadir (ignorado por el CLI)
+        └── web/
+            └── cms.matra.../       ← public_html (ignorado por el CLI)
 ```
 
 - **Primer nivel**: categoría (`ai`, `apps`, `core`, `instances`, `sites`…).
-- **Segundo nivel**: nombre del servicio (normalmente con el dominio, p. ej. `foo.midominio.com`).
-- Dentro de cada servicio debe estar el archivo `docker-compose.yml`.
+- **Segundo nivel**: nombre del stack. En `sites`, cada stack es un **cliente**
+  y su `docker-compose.yml` contiene **todos los sitios** de ese cliente como
+  servicios (p. ej. `cms-matra-wp`, `matra-db`, `matra-pma`).
+- Dentro de cada stack debe estar el archivo `docker-compose.yml`.
+
+> El escaneo es **no recursivo** (2 niveles). Los árboles de datos (`db/`,
+> `web/`, `vendor/`, …) no se recorren, lo que evita errores de permisos y
+> `docker-compose.yml` anidados que no son stacks reales.
 
 ### Regla de los sufijos de dominio
 

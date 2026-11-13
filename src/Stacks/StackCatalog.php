@@ -133,22 +133,15 @@ final class StackCatalog implements StackCatalogInterface
             return;
         }
 
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($this->baseDir, \RecursiveDirectoryIterator::SKIP_DOTS)
-        );
-
-        foreach ($iterator as $file) {
-            if (!$file->isFile() || $file->getFilename() !== 'docker-compose.yml') {
-                continue;
-            }
-
-            $relativePath = ltrim(substr($file->getPath(), strlen($this->baseDir)), '/\\');
-            $parts = explode('/', str_replace('\\', '/', $relativePath));
-
-            if (count($parts) >= 2) {
-                $category = $parts[0];
-                $service = implode('/', array_slice($parts, 1));
-                $this->groupedServices[$category][] = $service;
+        // Escaneo NO recursivo de 2 niveles: <categoria>/<servicio>/docker-compose.yml.
+        // Evita descender a árboles de datos (db/, web/, vendor/, ...) que pueden
+        // tener permisos de contenedor (crash por Permission denied) y capturar
+        // docker-compose.yml anidados que no son stacks reales.
+        foreach ($this->directoriesIn($this->baseDir) as $category) {
+            foreach ($this->directoriesIn($this->baseDir . '/' . $category) as $service) {
+                if (is_file($this->baseDir . '/' . $category . '/' . $service . '/docker-compose.yml')) {
+                    $this->groupedServices[$category][] = $service;
+                }
             }
         }
 
@@ -159,5 +152,38 @@ final class StackCatalog implements StackCatalogInterface
         }
 
         unset($services);
+    }
+
+    /**
+     * @return string[] Nombres de subdirectorios (no ocultos) de una carpeta,
+     *                  ordenados alfabéticamente.
+     */
+    private function directoriesIn(string $path): array
+    {
+        if (!is_dir($path)) {
+            return [];
+        }
+
+        $entries = scandir($path);
+
+        if ($entries === false) {
+            return [];
+        }
+
+        $dirs = [];
+
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..' || str_starts_with($entry, '.')) {
+                continue;
+            }
+
+            if (is_dir($path . '/' . $entry)) {
+                $dirs[] = $entry;
+            }
+        }
+
+        sort($dirs);
+
+        return $dirs;
     }
 }

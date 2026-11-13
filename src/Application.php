@@ -6,6 +6,7 @@ namespace ComposeCli;
 
 use ComposeCli\Compose\ActionCatalog;
 use ComposeCli\Compose\ComposeRunner;
+use ComposeCli\Compose\ServiceResolver;
 use ComposeCli\Navigation\Menu;
 use ComposeCli\Navigation\Wizard;
 use ComposeCli\Stacks\StackCatalog;
@@ -59,6 +60,7 @@ final class Application
         $config = Config::fromEnvironment(dirname(__DIR__) . '/cli.php');
         $catalog = new StackCatalog($config->baseDir(), $config->domainSuffixes());
         $runner = new ComposeRunner();
+        $resolver = new ServiceResolver();
         $dryRun = isset($flags['--dry-run']);
 
         if ($positional === []) {
@@ -66,10 +68,10 @@ final class Application
                 return $this->help($output);
             }
 
-            return $this->interactive($config, $catalog, $runner, $output);
+            return $this->interactive($config, $catalog, $runner, $resolver, $output);
         }
 
-        return $this->direct($config, $catalog, $runner, $positional, $output, $dryRun);
+        return $this->direct($config, $catalog, $runner, $resolver, $positional, $output, $dryRun);
     }
 
     /**
@@ -95,6 +97,7 @@ final class Application
         Config $config,
         StackCatalog $catalog,
         ComposeRunner $runner,
+        ServiceResolver $resolver,
         ConsoleOutputInterface $output,
     ): int {
         if ($catalog->groupedServices() === []) {
@@ -108,9 +111,9 @@ final class Application
         }
 
         $menu = new Menu($output, new Terminal());
-        $result = (new Wizard($catalog, $menu, new ActionCatalog()))->run();
+        $result = (new Wizard($catalog, $menu, new ActionCatalog(), $resolver))->run();
 
-        return $runner->run($result->service, $result->action);
+        return $runner->run($result->service, $result->action, [], false, $result->targetService);
     }
 
     /**
@@ -120,13 +123,12 @@ final class Application
         Config $config,
         StackCatalog $catalog,
         ComposeRunner $runner,
+        ServiceResolver $resolver,
         array $positional,
         ConsoleOutputInterface $output,
         bool $dryRun,
     ): int {
         $serviceInput = array_shift($positional);
-        $action = array_shift($positional);
-        $extra = $positional;
 
         $service = $catalog->resolveForInput($serviceInput);
 
@@ -155,6 +157,18 @@ final class Application
             return 1;
         }
 
+        // Si el siguiente token es un servicio del stack, se toma como objetivo
+        // (docker compose <acción> <servicio>); si no, es la acción.
+        $stackServices = $resolver->services($service->composeFile);
+        $target = null;
+
+        if ($positional !== [] && in_array($positional[0], $stackServices, true)) {
+            $target = array_shift($positional);
+        }
+
+        $action = array_shift($positional);
+        $extra = $positional;
+
         if ($action === null) {
             $output->getErrorOutput()->writeln(
                 Palette::RED
@@ -165,7 +179,7 @@ final class Application
             return 1;
         }
 
-        return $runner->run($service, $action, $extra, $dryRun);
+        return $runner->run($service, $action, $extra, $dryRun, $target);
     }
 
     private function version(ConsoleOutputInterface $output): int
@@ -180,13 +194,15 @@ final class Application
         $output->writeln('<h1>compose-cli</h1> — Gestión de stacks Docker Compose');
         $output->writeln('');
         $output->writeln('<h1>Uso:</h1>');
-        $output->writeln('  cli.php                                  Menú interactivo');
-        $output->writeln('  cli.php <stack> <acción> [extra...]      Ejecución directa');
-        $output->writeln('  cli.php --help                           Muestra esta ayuda');
-        $output->writeln('  cli.php --version                        Muestra la versión');
+        $output->writeln('  cli.php                                        Menú interactivo');
+        $output->writeln('  cli.php <stack> <acción> [extra...]            Ejecución directa (todo el stack)');
+        $output->writeln('  cli.php <stack> <servicio> <acción> [extra...] Ejecución directa (un servicio)');
+        $output->writeln('  cli.php --help                                 Muestra esta ayuda');
+        $output->writeln('  cli.php --version                              Muestra la versión');
         $output->writeln('');
-        $output->writeln('<h1>Stack:</h1>   categoria/servicio o solo servicio (ej: sites/foo o foo)');
-        $output->writeln('<h1>Acción:</h1>  comando de docker compose (ej: up -d, down, logs)');
+        $output->writeln('<h1>Stack:</h1>     categoria/stack o solo stack (ej: sites/matra o matra)');
+        $output->writeln('<h1>Servicio:</h1>  servicio del stack (ej: cms-matra-wp, matra-db)');
+        $output->writeln('<h1>Acción:</h1>    comando de docker compose (ej: up -d, down, logs)');
         $output->writeln('');
         $output->writeln('<h1>Opciones:</h1>');
         $output->writeln('  --dry-run      Imprime el comando sin ejecutarlo');
@@ -194,8 +210,9 @@ final class Application
         $output->writeln('  -V, --version  Muestra la versión');
         $output->writeln('');
         $output->writeln('<h1>Ejemplos:</h1>');
-        $output->writeln('  cli.php sites/foo up -d');
-        $output->writeln('  cli.php --dry-run foo up -d --build');
+        $output->writeln('  cli.php sites/matra up -d');
+        $output->writeln('  cli.php sites/matra cms-matra-wp up -d');
+        $output->writeln('  cli.php --dry-run matra up -d --build');
 
         return 0;
     }
